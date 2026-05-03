@@ -1809,7 +1809,9 @@ wire [7:0] ppu_dbus =
 		latched_dout) :
 	latched_dout;
 
-assign emphasis = {write_2001 ? ppu_dbus[7] : emph_reg[2], emph_reg[1], emph_reg[0]}; // behavior of 2c07 is unknown so oh well.
+// NESdev: on PAL/Dendy, the red and green emphasis bits swap meaning.
+wire [2:0] emph_write = |sys_type ? {ppu_dbus[7], ppu_dbus[5], ppu_dbus[6]} : ppu_dbus[7:5];
+assign emphasis = write_2001 ? emph_write : emph_reg;
 
 assign SS_PPU_BACK[    1] = obj_patt;
 assign SS_PPU_BACK[    2] = bg_patt;
@@ -1862,7 +1864,7 @@ always @(posedge clk) begin
 					object_clip <= ppu_dbus[2];
 					enable_playfield <= ppu_dbus[3];
 					enable_objects <= ppu_dbus[4];
-					emph_reg <= |sys_type ? {ppu_dbus[7], ppu_dbus[5], ppu_dbus[6]} : ppu_dbus[7:5];
+					emph_reg <= emph_write;
 				end
 			endcase
 			if (clear) begin

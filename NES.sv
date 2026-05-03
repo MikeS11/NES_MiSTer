@@ -37,6 +37,7 @@ module emu
 	output [1:0]  VGA_SL,
 	output        VGA_SCALER, // Force VGA scaler
 	output        VGA_DISABLE, // analog out is off
+	output        Native_Analog_EN,
 
 	input  [11:0] HDMI_WIDTH,
 	input  [11:0] HDMI_HEIGHT,
@@ -273,6 +274,7 @@ parameter CONF_STR = {
 	"P4O[66:65],RAM Clear,No,$00,$FF,Random;",
 	"P4O[64],PPU Reset Behavior,Famicom,NES;",
 	"P4OQ,Video Dijitter,Enabled,Disabled;",
+	"P4O[70],Native Analog,Off,Composite;",
 	"P4O[69],Debug Dots,Off,On;",
 	"-  ;",
 	"R0,Reset;",
@@ -514,7 +516,7 @@ pll_cfg pll_cfg
 
 always @(posedge CLK_50M) begin : cfg_block
 	reg pald = 0, pald2 = 0;
-	reg [2:0] state = 0;
+	reg [3:0] state = 0;
 
 	pald  <= (effective_sys_type == 2'd1);
 	pald2 <= pald;
@@ -531,12 +533,20 @@ always @(posedge CLK_50M) begin : cfg_block
 					cfg_write <= 1;
 				end
 			3: begin
-					cfg_address <= 7;
+					cfg_address <= 7;  // DSM fractional division
 					cfg_data <= pald2 ? 2201376898 : 2537933971;
 					cfg_write <= 1;
 				end
 			5: begin
-					cfg_address <= 2;
+					// C1 counter: PAL = divide-by-8 (53.2MHz), NTSC = divide-by-10 (42.95MHz)
+					// Format: [22:18]=cnt_sel(1), [17]=odd, [16]=bypass, [15:8]=hi, [7:0]=lo
+					cfg_address <= 5;  // C_COUNTERS_REG
+					cfg_data <= pald2 ? {9'd0, 5'd1, 2'b00, 8'd4, 8'd4}   // div8: hi=4, lo=4
+					                  : {9'd0, 5'd1, 2'b00, 8'd5, 8'd5};  // div10: hi=5, lo=5
+					cfg_write <= 1;
+				end
+			7: begin
+					cfg_address <= 2;  // Start reconfiguration
 					cfg_data <= 0;
 					cfg_write <= 1;
 				end
@@ -868,9 +878,13 @@ always_ff @(posedge clk) begin
 end
 
 wire nes_hblank, nes_hsync, nes_vsync, nes_vblank;
+wire [7:0] native_composite;
+wire native_composite_enabled = status[70]; // 0=Off, 1=Composite
 
 NES nes (
 	.clk             (clk),
+	.clk_42m         (CLK_VIDEO),
+	.native_composite(native_composite),
 	.reset_nes       (reset_nes),
 	.ppu_rst_behavior(status[64]),
 	.cold_reset      (downloading & (type_fds | type_nes)),
@@ -901,7 +915,7 @@ NES nes (
 	.cycle           (cycle),
 	.scanline        (scanline),
 	.mask            (hide_overscan[1] ? 2'b00 : status[28:27]),
-	.dejitter_timing (status[26]),
+	.dejitter_timing (status[26] | (native_composite_enabled & ~OSD_STATUS)), // Native composite keeps raw NTSC short-frame timing.
 	// User Input
 	.joypad_out      (joypad_out),
 	.joypad_clock    (joypad_clock),
@@ -1207,14 +1221,37 @@ video video
 	.pal_video(pal_video)
 );
 
+assign Native_Analog_EN = native_composite_enabled & ~OSD_STATUS; // Inactive during OSD so framework pipeline works normally
+
+wire [7:0] vm_vga_r, vm_vga_g, vm_vga_b;
+wire vm_vga_vs, vm_vga_hs, vm_vga_de_out;
+
 video_mixer #(260, 0, 1) video_mixer
 (
 	.*,
+	.VGA_R(vm_vga_r),
+	.VGA_G(vm_vga_g),
+	.VGA_B(vm_vga_b),
+	.VGA_VS(vm_vga_vs),
+	.VGA_HS(vm_vga_hs),
+	.VGA_DE(vm_vga_de_out),
 	.freeze_sync(),
-	.VGA_DE(vga_de),
 	.hq2x(scale==1),
 	.scandoubler(scale || forced_scandoubler)
 );
+
+// Native Analog output mux
+// Mode 0 (Off):       Normal RGB from video_mixer
+// Mode 1 (Composite): R=0, G=Composite (DC-coupled), B=0
+// When OSD is active, revert to normal RGB so yc_out can encode the menu properly
+wire use_native = native_composite_enabled & ~OSD_STATUS;
+
+assign VGA_R  = use_native ? 8'd0             : vm_vga_r;
+assign VGA_G  = use_native ? native_composite : vm_vga_g;
+assign VGA_B  = use_native                          ? 8'd0             : vm_vga_b;
+assign VGA_VS = use_native                          ? nes_vsync         : vm_vga_vs;
+assign VGA_HS = use_native                          ? nes_hsync         : vm_vga_hs;
+assign vga_de = vm_vga_de_out;
 
 ////////////////////////////  CODES  ///////////////////////////////////
 

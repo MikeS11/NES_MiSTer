@@ -195,7 +195,7 @@ always_ff @(posedge clk) begin
 
 			// Divide U*sin(wt) and V*cos(wt) to fit results to 8 bit
 			phase[3].u <= $signed(phase[2].u[20:9]) + $signed(phase[2].u[20:10]) + $signed(phase[2].u[20:14]);
-			phase[3].v <= $signed(phase[2].v[20:9]) + $signed(phase[2].v[20:10]) + $signed(phase[2].u[20:14]);
+			phase[3].v <= $signed(phase[2].v[20:9]) + $signed(phase[2].v[20:10]) + $signed(phase[2].v[20:14]);
 		end
 
 		// Stop the colorburst timer as its only needed for the initial pulse
@@ -224,8 +224,15 @@ always_ff @(posedge clk) begin
 
 	// Set Chroma / Luma output
 	C <= CVBS ? 8'd0 : phase[4].c[7:0];
-	Y <= CVBS ? ({1'b0, phase[5].y[17:11]} + {1'b0, phase[4].c[7:1]}) : phase[5].y[17:10];
+	Y <= CVBS ? cvbs_out : phase[5].y[17:10];
 end
+
+// CVBS full-range composite: luma + (chroma - vref), clamped to [0, 255]
+wire [9:0] cvbs_sum    = {2'b0, phase[5].y[17:10]} + {2'b0, phase[4].c[7:0]};
+wire [9:0] cvbs_result = cvbs_sum - 10'd128;
+wire [7:0] cvbs_out    = (cvbs_sum < 10'd128) ? 8'd0 :
+                          (cvbs_sum > 10'd383) ? 8'd255 :
+                          cvbs_result[7:0];
 
 assign dout = {C, Y, 8'd0};
 

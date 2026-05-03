@@ -1359,8 +1359,8 @@ scanlines #(0) VGA_scanlines
 (
 	.clk(clk_vid),
 
-	.scanlines(scanlines),
-	.din(de_emu ? {r_out, g_out, b_out} : 24'd0),
+	.scanlines(Native_Analog_EN ? 2'b00 : scanlines),
+	.din((de_emu | Native_Analog_EN) ? {r_out, g_out, b_out} : 24'd0),
 	.hs_in(hs_fix),
 	.vs_in(vs_fix),
 	.de_in(de_emu),
@@ -1438,7 +1438,7 @@ reg  [39:0] PhaseInc;
 
 	// 1-bit output for positive/negative of wave, no LUT required. Output 1 if disabled for further logic
 	reg subcarrier_out;
-	always @(posedge clk_vid) subcarrier_out <= ~(subcarrier & csync_en & ~ypbpr_en & ~forced_scandoubler & ~vgas_en) | sub_accum[39];
+	always @(posedge clk_vid) subcarrier_out <= ~(subcarrier & csync_en & ~ypbpr_en & ~forced_scandoubler & ~vgas_en & ~Native_Analog_EN) | sub_accum[39];
 
 
 	wire VGA_DISABLE;
@@ -1448,7 +1448,7 @@ reg  [39:0] PhaseInc;
 		vga_out vga_scaler_out
 		(
 			.clk(clk_hdmi),
-			.ypbpr_en(ypbpr_en),
+			.ypbpr_en(ypbpr_en & ~Native_Analog_EN),
 			.hsync(hdmi_hs_osd),
 			.vsync(hdmi_vs_osd),
 			.csync(hdmi_cs_osd),
@@ -1469,7 +1469,7 @@ reg  [39:0] PhaseInc;
 	vga_out vga_out
 	(
 		.clk(clk_vid),
-		.ypbpr_en(ypbpr_en),
+		.ypbpr_en(ypbpr_en & ~Native_Analog_EN),
 		.hsync(vga_hs_osd),
 		.vsync(vga_vs_osd),
 		.csync(vga_cs_osd),
@@ -1483,12 +1483,14 @@ reg  [39:0] PhaseInc;
 	);
 
 	`ifndef MISTER_DISABLE_YC
-		assign {vga_o, vga_hs, vga_vs, vga_cs, vga_de } = ~yc_en ? {vga_o_t, vga_hs_t, vga_vs_t, vga_cs_t, vga_de_t } : {yc_o, yc_hs, yc_vs, yc_cs, yc_de };
+		// When Native_Analog_EN: use native signal, but fall back to yc_out
+		// when OSD menu is active so CRT-only users can see and navigate it.
+		assign {vga_o, vga_hs, vga_vs, vga_cs, vga_de } = (~yc_en | (Native_Analog_EN & ~osd_status)) ? {vga_o_t, vga_hs_t, vga_vs_t, vga_cs_t, vga_de_t } : {yc_o, yc_hs, yc_vs, yc_cs, yc_de };
 	`else
 		assign {vga_o, vga_hs, vga_vs, vga_cs, vga_de } =  {vga_o_t, vga_hs_t, vga_vs_t, vga_cs_t, vga_de_t } ;
 	`endif
 
-	wire vgas_en = vga_fb | vga_scaler;
+	wire vgas_en = (vga_fb | vga_scaler) & ~Native_Analog_EN;
 
 	wire cs1 = vgas_en ? vgas_cs : vga_cs;
 	wire de1 = vgas_en ? vgas_de : vga_de;
@@ -1731,6 +1733,8 @@ reg  [1:0] sl_r;
 wire [1:0] sl = sl_r;
 always @(posedge clk_sys) sl_r <= FB_EN ? 2'b00 : scanlines;
 
+wire Native_Analog_EN;
+
 emu emu
 (
 	.CLK_50M(FPGA_CLK2_50),
@@ -1752,6 +1756,7 @@ emu emu
 `ifndef MISTER_DUAL_SDRAM
 	.VGA_DISABLE(VGA_DISABLE),
 `endif
+	.Native_Analog_EN(Native_Analog_EN),
 
 	.HDMI_WIDTH(direct_video ? 12'd0 : hdmi_width),
 	.HDMI_HEIGHT(direct_video ? 12'd0 : hdmi_height),

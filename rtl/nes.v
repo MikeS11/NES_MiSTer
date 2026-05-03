@@ -73,6 +73,8 @@ endmodule
 
 module NES(
 	input         clk,
+	input		  clk_42m,
+	output  [7:0] native_composite, // ADDED: Raw composite out
 	input         reset_nes,
 	input         ppu_rst_behavior,
 	input         cold_reset,
@@ -632,6 +634,70 @@ PPU ppu(
 	.Savestate_OAMReadData  (Savestate_OAMReadData   )
 );
 
+
+// =================================================================
+// NATIVE COMPOSITE/S-VIDEO DAC INTEGRATION (NTSC 2C02 + PAL 2C07)
+// =================================================================
+
+// 1. Generate Composite Sync from the PPU's existing outputs
+wire csync = hsync ^ vsync;
+
+wire is_pal = (sys_type == 2'b01);
+
+// 2. Generate Colorburst Enable Window
+//    NTSC 2C02: NESdev places colorburst at PPU dots 306-320
+//    inclusive, 15 dots = 120 samples at 12x subcarrier = 10 cycles.
+wire ntsc_colorburst_en = hblank && (ppu_cycle >= 9'd306) && (ppu_cycle < 9'd321);
+
+//    PAL keeps the existing ~10-cycle back-porch burst window.
+reg pal_colorburst_en;
+reg [7:0] pal_burst_counter;
+always @(posedge clk_42m) begin
+    if (!is_pal || hsync) begin
+        pal_burst_counter <= 0;
+        pal_colorburst_en <= 0;
+    end else if (pal_burst_counter < 8'd200) begin
+        pal_burst_counter <= pal_burst_counter + 1;
+        pal_colorburst_en <= (pal_burst_counter > 8'd48) && (pal_burst_counter < 8'd168);
+    end else begin
+        pal_colorburst_en <= 0;
+    end
+end
+
+wire colorburst_en = is_pal ? pal_colorburst_en : ntsc_colorburst_en;
+
+// 3. NTSC 2C02 DAC
+wire [7:0] ntsc_composite;
+
+native_2c02_dac ntsc_dac_inst (
+    .clk_42m       (clk_42m),
+    .reset         (reset),
+    .nes_color     (color),
+    .emphasis      (emphasis),
+    .sync          (csync),
+    .blank         (hblank | vblank),
+    .colorburst_en (colorburst_en),
+    .composite_out (ntsc_composite)
+);
+
+// 4. PAL 2C07 DAC
+wire [7:0] pal_composite;
+
+native_2c07_dac pal_dac_inst (
+    .clk_video     (clk_42m),        // PLL provides ~53.2MHz for PAL
+    .reset         (reset),
+    .nes_color     (color),
+	.emphasis      (emphasis),
+    .sync          (csync),
+    .hsync         (hsync),          // For PAL line alternation (V-flip)
+    .blank         (hblank | vblank),
+    .colorburst_en (colorburst_en),
+    .composite_out (pal_composite)
+);
+
+// 5. Mux NTSC/PAL outputs based on sys_type
+assign native_composite = is_pal ? pal_composite : ntsc_composite;
+// =================================================================
 
 /**********************************************************/
 /*************             Cart             ***************/

@@ -13,7 +13,7 @@ set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
 set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
 set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
 
-set_global_assignment -name LAST_QUARTUS_VERSION "17.0.2 Standard Edition"
+set_global_assignment -name LAST_QUARTUS_VERSION "17.0.2 Lite Edition"
 
 set_global_assignment -name GENERATE_RBF_FILE ON
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
@@ -57,4 +57,34 @@ set_global_assignment -name SEED 1
 source sys/sys.tcl
 source sys/sys_analog.tcl
 source files.qip
+set_global_assignment -name CDF_FILE jtag.cdf
+set_global_assignment -name QIP_FILE sys/sys.qip
+set_global_assignment -name QIP_FILE rtl/t65/t65.qip
+set_global_assignment -name QIP_FILE rtl/mappers/mappers.qip
+set_global_assignment -name QIP_FILE rtl/SOUND/OPLL/OPLL.qip
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sdram.sv
+set_global_assignment -name VHDL_FILE rtl/dpram.vhd
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/ddram.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/EEPROM_24C0x.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/cheatcodes.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/miracle.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/keyboard.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/zapper.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/cart.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/video.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/ppu.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/apu.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/native_2c02_dac.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/native_2c07_dac.sv
+set_global_assignment -name VHDL_FILE rtl/bus_savestates.vhd
+set_global_assignment -name VHDL_FILE rtl/statemanager.vhd
+set_global_assignment -name VHDL_FILE rtl/savestates.vhd
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/regs_savestates.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/savestate_ui.sv
+set_global_assignment -name VERILOG_FILE rtl/nes.v
+set_global_assignment -name VERILOG_FILE rtl/dsp.v
+set_global_assignment -name VERILOG_FILE rtl/compat.v
+set_global_assignment -name SDC_FILE NES.sdc
+set_global_assignment -name SYSTEMVERILOG_FILE NES.sv
+set_global_assignment -name SOURCE_FILE db/NES.cmp.rdb
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
